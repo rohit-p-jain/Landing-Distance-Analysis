@@ -1,8 +1,3 @@
----
-title: "Flight Landing Overrun Analysis"
-author: "Rohit Pradeep Jain (M12397009)"
-output: word_document
----
 
 ```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
 library(MASS)
