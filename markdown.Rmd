@@ -1,0 +1,547 @@
+---
+title: "Flight Landing Overrun Analysis"
+author: "Rohit Pradeep Jain (M12397009)"
+output: word_document
+---
+
+```{r echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+library(MASS)
+library(readxl)
+library(tidyverse)
+library(knitr)
+library(gridExtra)
+```
+
+
+## Goal of the prject
+
+The goal of the project is to reduce the risk of flight landing overrun. Landing overrun is defined as a situation in which the aircraft moves beyond the end of the runway during landing. 
+
+We have two files with the landing distance during each landing along with the associated parameters at that point of team. Our motivation is to identify the factors that affect flight landing overrun and by how  much would they impact the landing distance of a commercial flight
+
+## Importing Data and Removing duplicates
+
+The first step is to impport the datasets `faa1` and `faa2` into the R enviroment and check the structure of the data.
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+#Importing
+faa1 <- read_xls("faa1.xls")
+faa2 <- read_xls("faa2.xls")
+
+# Check the structure
+str(faa1)
+str(faa2)
+```
+
+**Observation:**
+
+* The duration column is missing for the `faa2` dataset
+* `faa1` has the data of 800 flights while `faa2` has 150 flights
+
+**Conclusion:**
+
+* Care should be taken while analyzing the duration column as it is missing in the `faa2` dataset
+
+
+The next step is to combine both these datasets, while taking care of the missing duration column from `faa2`. We get a total of 950 rows
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+#Binding rows
+faa <- bind_rows(faa1,faa2)
+
+print(paste0("The number of duplicates are ",sum(duplicated(faa[,-2]))))
+
+# Action: split into duplicates and dedeuped data
+faa_deduped <- faa[!duplicated(faa[,-2]),]
+faa_duplicates <- faa[duplicated(faa[,-2]),]
+```
+
+**Observation:**
+
+* There are 100 duplicate observations when we combine both the datasets
+    + Duplicates are excluding the duration column
+* These duplicates are exactly similar till the last decimal place  
+
+**Conclusion:**
+
+* It is decided to remove the duplicate obsevations from the combined data
+* The resulting dataset has 850 rows of de-duped data
+
+
+## Summarizing the dedeuped data
+
+We check the structure of the deduped data and check the summary of all the variables in the data
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+# Strucute
+str(faa_deduped)
+
+#Summary
+summary(faa_deduped)
+```
+
+**Observations:**
+
+* The dataset has 850 sample flights with 8 variables
+* There are missing values for duration (50), and speed air (650)
+* There are abnormal values across columns, which go beyond the set standards for each variable
+
+**Conclusion:**
+
+* Data cleaning needs to be performed for the abnormal/outlier values
+* Records with missing observations will be retained
+
+
+## Presentation information for FAA - Summary 1
+
+* **Duplicates:** There are 100 observations which are exactly same across all columns (except duration) in the data; These rows are considered as duplicates and are remvoed to get a deduped dataset
+* **Missing Duration variable:** The duration column is missing from the `faa2` dataset (50 records on the deduped data)
+* **Abnormal/Missing values:** The initial summary of the data has indicated abnormal/outlier values for some of the variables and missing values for others
+* **Number of records:** We have the data for 850 flights (deduped) with 9 variables including the landing distance
+
+## Data Cleaning
+
+As observed in the summary data, there are abnormal/outlier variables across multiple columns. Comparing with the data dictionary, we find that:
+
+* **Speed_ground:** Has values less than 30 mph and Greater than 140 mph for some records
+* **Height:** Has negative values and values that are less than 6 metres
+* **Distance:** Has values over 6000 feet
+* **Duration:** Has values less than 40 minutes
+
+For the missing observations:
+
+* **Duration:** Is missing for 50 sample flights (Due to `faa2` dataset)
+* **Speed air** Is missing for 76% (642 observations) of the data
+
+It is decided to remove the sample flight information for rows with abnormal values. However, the missing value data will be retained currently.
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+# Observations lost
+print(paste("The total records with abnormal values are",
+sum((faa_deduped$duration < 40 & !is.na(faa_deduped$duration)) | faa_deduped$speed_ground > 140 | faa_deduped$speed_ground < 30 | faa_deduped$height < 6 |
+      faa_deduped$distance > 6000)))
+```
+
+**Observation:**
+
+* From the below output we can infer that 19 observations have abnormal values
+
+**Conclusion:**
+
+* Since this corresponds to only 2% of the entire sample, we decide to remove the abnormal/outlier data. 
+
+We remove the abnormal records and check the structure and summary again
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+#Clean
+faa_clean <- faa_deduped[!((faa_deduped$duration <40 & !is.na(faa_deduped$duration)) | faa_deduped$speed_ground > 140
+                           | faa_deduped$speed_ground < 30 | faa_deduped$height < 6 |
+                             faa_deduped$distance > 6000),
+                        ]
+
+# Strucute
+str(faa_clean)
+
+#Summary
+summary(faa_clean)
+```
+
+**Observation:**
+
+* It can be inferred that there are 831 observations, with missing values only for air speed and duration.
+* All other variables are within the range specified in the data dictionary
+
+
+## Single varaible exploration
+We plot the histogram of all the numeric variables in the clean dataset. The results are shown below:
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+#Numeric
+numeric_var <- sapply(faa_clean,is.numeric)
+
+#Plots
+ggplot(data = gather(faa_clean[,numeric_var], key = "key", value="value"), aes(x = value)) + 
+  geom_histogram(bins = 30, col = "cyan4", fill = "cyan4") + 
+  facet_wrap(~key, scales = 'free_x')
+```
+
+**Observation/Conclusion:**
+
+* From the above graphs, we observe that all variables other than speed_air and distance follow a near-normal distribution
+* Speed air is present only for values greater than 90
+* The landing distance is skewed towards the right
+
+## Presentation information for FAA - Summary 2
+
+* **Abnormal/Outlier values:** Abnormal values were observed across the variables ground speed, height, distance, and duration
+* **Outlier removal:** Since these abnormal values corresponded to only 2% of the dataset, it is decided that we delete these records for a better prediction
+* **Clean dataset:** The clean data has 831 observations with 8 variables; Missing values are present only for air speed and duration
+* **Variable statistics:** The summary statistics (mean, median, min, max etc.) are within the acceptable range for all the variables
+* **Distribution:** All variables except distance and air speed follow a near-normal distribution which will be helpful while modeling the data
+
+
+## Bivariate analysis
+
+To compare the relation between landing distance and other variables, we first crate the correlation matrix of landing distance against all numeric variables. 
+
+**R code**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+#Correlation
+faa_clean$aircraft_tp <- ifelse(faa_clean$aircraft=='airbus',1,0)
+numeric_var <- sapply(faa_clean,is.numeric)
+
+corr <- cor(faa_clean[,numeric_var],faa_clean$distance ,use="pairwise.complete.obs")
+corr <- as.data.frame((corr[order(abs(corr),decreasing = T),]))
+
+
+names(corr) <- c("Size of Correlation")
+
+corr$Direction <- ifelse(corr[,"Size of Correlation"] > 0,"Positive", "Negative")
+
+corr[,1] <- round(corr[,1],4)
+
+rownames(corr)[which(rownames(corr) == 'aircraft_tp')] <- "Aircraft (1 Airbus; 0 Boeing)" 
+corr <- corr[-1,]
+
+kable(corr)
+```
+
+**Observation:**
+
+* Air speed has the strongest correlation (positive) with the landing distance, with a value of 0.94
+* Speed ground has a correaltion of +0.87 with the landing distance
+* Make of the aircraft has a medium correlation with landing distance
+* Height and pitch have a weak positive correlation (<0.1)
+* Duration and number of passengers have a weak negative correaltion (>-0.1)
+* Lowest correlation for landing distance is with the numer of passengers.
+
+**Conclusion:**
+
+* Air and Ground Speed has the highest impact on the landing distance; Increase in  landing distance is observed when either of them is increased
+* Make of the aircraft has a moderate correlation with the landing distance
+* Number of passengers does not impact the landing distance
+* All other vaiables have a very weak correlation with the landing distance
+
+Next, scatter plots are created for visualizng the relationship of landing distance with all other variables.
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+# Plots
+ggplot(data = gather(faa_clean[,numeric_var], key = "key", value="value", -distance), aes(x = value, y= distance)) + 
+  geom_point(fill="cyan4") + 
+  facet_wrap(~key, scales = "free") +
+  ggtitle("Scatter Plots")
+```
+
+**Observation:**
+
+* Speed air and speed ground show a string positive relation with the landing distance
+* The type of aircraft affects the landing distance
+* All other varaibles do not show any major relationship
+
+**Conclusion:**
+
+* The plots confirm the correlation results that were observed above
+* Hence, we can confirm that speed air and speed ground are the varaibles which are highly correlated 
+
+## Regressing using a single factor
+
+We first regress the landing distance separately against each of the varaibles in the dataset. 
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE, comment = NA}
+models <- sapply(faa_clean[,!(colnames(faa_clean) %in% c("distance", "aircraft"))], function(x) { lm(faa_clean$distance ~ x)})
+
+pvalue <- data.frame(sapply(models, function(x) {summary(x)$coefficients[,4][2] }))
+coeff_dir <- data.frame(ifelse((sapply(models, function(x) {summary(x)$coefficients[,1][2] })) > 0,"Positive","Negative"))
+
+Variable <- (rownames(pvalue))
+Variable <- substr(Variable,1,nchar(Variable)-2)
+Variable[7] <- "Aircraft (1 Airbus; 0 Boeing)"
+
+x <- data.frame(Variable = Variable, Pvalue=pvalue[,1], Direction_of_coeff = coeff_dir[,1])
+x <- x[order(x$Pvalue),]
+x
+
+```
+
+**Observation:**
+
+* The direction of the regression coefficient is in sync with the correlation direction that was obtained earlier
+* However, the p-value of ground speed is much lower than air speed
+
+**Conclusion:**
+
+* The regression model is in line with the correlation outputs and no anomalies were discovered in this process
+* To compare the actual impact, we need to standardize each variable and check the regression coefficient to determine its importance
+
+We standardize all the variables, barring the type of aircraft and calculate the betas
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE, comment = NA}
+faa_standardized <- faa_clean[,!(colnames(faa_clean) %in% c("distance", "aircraft"))]
+
+for (i in 1:(length(colnames(faa_standardized))-1)) {
+  faa_standardized[[i]] = (faa_standardized[[i]] - mean(faa_standardized[[i]], na.rm = T))/sd(faa_standardized[[i]],na.rm=T)
+}
+
+models <- sapply(faa_standardized, function(x) { lm(faa_clean$distance ~ x)})
+
+coeff <- data.frame(sapply(models, function(x) {summary(x)$coefficients[,1][2] }))
+
+coeff_dir <- data.frame(ifelse(sapply(models, function(x) {summary(x)$coefficients[,1][2] })>0,"Positive", "Negative"))
+
+Variable <- (rownames(pvalue))
+Variable <- substr(Variable,1,nchar(Variable)-2)
+Variable[7] <- "Aircraft (1 Airbus; 0 Boeing)"
+
+x1 <- data.frame(Variable = Variable, Coeff=round(coeff[,1],4), Direction_of_coeff = coeff_dir[,1])
+x1 <- x1[order(abs(x1$Coeff), decreasing = T),]
+
+x1
+```
+
+**Observation:**
+
+* When standardized, speed ground has the highest beta parameter closely followef by speed air
+* Duration and number of passengers are the least important variables in predicting landing distance
+
+**Conclusion:**
+
+* Importance of standardized betas follow the same order as the p-value of the unstandarized counterparts
+* Hence, we can use these results to rank the most important variables
+
+To rank the most important variables from the results of correlation (Table 1), P-Value (Table 2), and Betas of standardized coefficients, we combine all the three ranks and average the best
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+rank_corr <- data.frame(Variable = rownames(corr), Rank1 = row_number(-abs(corr$`Size of Correlation`)))
+rank_pval <- data.frame(Variable = x$Variable, Rank2 = row_number(abs(x$Pvalue)))
+rank_betas <- data.frame(Variable = x1$Variable, Rank3 = row_number(-abs(x1$Coeff)))
+
+rank_corr %>%
+  left_join(rank_pval,by = "Variable") %>%
+  left_join(rank_betas,by = "Variable") %>%
+  mutate(rank_avg = (Rank1+Rank2+Rank3)/3, Overall_rank = row_number(rank_avg)) %>%
+  arrange(Overall_rank) %>%
+  select(Variable, Overall_rank, Rank1, Rank2, Rank3) %>%
+  kable()
+```
+
+## Presentation information for FAA - Summary 3
+
+* The variables have been ranked above based on their relative ranking in the correlation, P-value, and size of the standardized coefficients
+* Ground Speed, Air Speed, and the make of the aircraft are the three most important variables in determining the landing distance of an aircraft
+* Variables like duration and number of passengers have the least impact in determining the landing distance
+
+## Collinearity among variables
+
+To check collinearity among variables, we create three different regression models for Air Speed, Ground Speed, and then the combination
+
+```{r message=FALSE, error=FALSE, warning=FALSE, comment = NA}
+#Models
+model1 <- lm(distance ~ speed_ground, data = faa_clean)
+model2 <- lm(distance ~ speed_air, data = faa_clean)
+model3 <- lm(distance ~ speed_ground + speed_air, data = faa_clean)
+
+#Model summary
+summary(model1)$coefficients 
+summary(model2)$coefficients 
+summary(model3)$coefficients 
+```
+
+From the above results, we observe a sign change when both speed air and speed ground are added
+
+* The beta coefficient of speed ground becomes negative for the combined model, which is against the original notion that landing distance is positively correlated with ground speed
+* The PValue become 0.26, which indicates that the variable is insignificant
+
+To futher understand this, we check the correlation between ground and air speed 
+```{r message=FALSE, error=FALSE, warning=FALSE, comment = NA}
+#Correlation
+corr <- cor(faa_clean$speed_ground,faa_clean$speed_air,  use="pairwise.complete.obs")
+```
+
+**Observation:**
+
+* The correlation between air speed and ground speed is `r round(corr,3)` which indicates a very high correlaiton between these variables
+* The best practice to avoid vif is to keep only one of these variables
+
+**Conclusion:**
+
+* It is decided to retain the variable `air speed`; The reasons are:
+    + The goal of the project is to determine when is the risk of landing overrun; This typically happens when the air speed is very high
+    + Air speed has a stronger correlation with landing distance
+    + In the combined model, air speed had a significant PValue when compared to ground speed
+  
+The only downfall is that the data used will be 25% of the original data as air speed is blank for 75% records. However with `air speed` we can determine landing overrun more accurately
+
+## Variable selection based on ranking in table0
+
+We will create 6 different models based on the ranking in table 0. After we've decided to proceed with air speed, the variables in order are:
+
+1. Air speed
+2. Type of Aircraft (1 For Airbus, 0 For Boeing)
+3. Height
+4. Pitch
+5. Duration
+6. Number of Passengers
+
+To select variables, we first check the R-Sqaured value
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+model1 <- lm(distance ~ speed_air, data=faa_clean)
+model2 <- lm(distance ~ speed_air + aircraft_tp, data=faa_clean)
+model3 <- lm(distance ~ speed_air + aircraft_tp + height, data=faa_clean)
+model4 <- lm(distance ~ speed_air + aircraft_tp + height + pitch, data=faa_clean)
+model5 <- lm(distance ~ speed_air + aircraft_tp + height + pitch + duration, data=faa_clean)
+model6 <- lm(distance ~ speed_air + aircraft_tp + height + pitch + duration + no_pasg, data=faa_clean)
+
+rsq.model <- rep(0,6)
+
+rsq.model[1] <- summary(model1)$r.squared
+rsq.model[2] <- summary(model2)$r.squared
+rsq.model[3] <- summary(model3)$r.squared
+rsq.model[4] <- summary(model4)$r.squared
+rsq.model[5] <- summary(model5)$r.squared
+rsq.model[6] <- summary(model6)$r.squared
+
+ggplot(data = NULL,aes(x = 1:6, y = rsq.model)) +
+  geom_line(col = "blue") +
+  scale_x_continuous(breaks = 1:6) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "R Squared vs. Number of variables", x = "Number of variables", y = "R Squared")
+```
+
+**Observation:**
+
+* Adding the first three variables, that is air speed, type of aircrfat, and height lead to an R-sqaure of 97.4%
+    + There is a continuous increase from one to three variable addition
+* Post that the R-squared almost remains constant
+
+The next step is comparing the adjusted R-Sqaured, which penalizes for adding more variables to the model. The results are shown below
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+adj.rsq.model <- rep(0,6)
+
+adj.rsq.model[1] <- summary(model1)$adj.r.squared
+adj.rsq.model[2] <- summary(model2)$adj.r.squared
+adj.rsq.model[3] <- summary(model3)$adj.r.squared
+adj.rsq.model[4] <- summary(model4)$adj.r.squared
+adj.rsq.model[5] <- summary(model5)$adj.r.squared
+adj.rsq.model[6] <- summary(model6)$adj.r.squared
+
+ggplot(data = NULL,aes(x = 1:6, y = adj.rsq.model)) +
+  geom_line(col = "blue") +
+  scale_x_continuous(breaks = 1:6) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(title = "Adjusted R Squared vs. Number of variables", x = "Number of variables", y = "Adjusted R Squared")
+```
+
+**Observation:**
+
+* The adjusted R-Square too follows a similar pattern to the R-sqaured
+* Adjusted R-Squared increases till the addition of three variables and then remains constant
+
+The last step is to check the AIC values for each of the models to decide the final variables to be used
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+aic.model <- rep(0,6)
+
+aic.model[1] <- AIC(model1)
+aic.model[2] <- AIC(model2)
+aic.model[3] <- AIC(model3)
+aic.model[4] <- AIC(model4)
+aic.model[5] <- AIC(model5)
+aic.model[6] <- AIC(model6)
+
+ggplot(data = NULL,aes(x = 1:6, y = aic.model)) +
+  geom_line(col = "blue") +
+  scale_x_continuous(breaks = 1:6) +
+  labs(title = "AIC vs. Number of variables", x = "Number of variables", y = "AIC")
+```
+
+**Observation:**
+
+* A two step decrease is observed for AIC: One at three variables and the other at 5 variables
+* A lower AIC is always recommended, but makes the model more complex
+
+**Conclusion:**
+
+* From the adjusted R-Squared and AIC graphs, it can be concluded that speed air, type of aircraft, and height can be selected as the variables to build the model on
+    + The steep decline in AIC is observed at the three variables; The other decline from 3 to 5 variables is relatively smaller
+    + The adjusted R-squared turns out to be constant after 3 variables
+* The three variables selected are:
+    1. Air Speed
+    2. Type of Aircraft (1 for Airbus)
+    3. Height
+
+## Automatic Variable Selection
+
+Automatic varaible selection can be done using the forward, backward, or both methofs. The `stepAIC` forward function is used to compare the results from the above varaible selection. 
+
+**R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+data_final <- faa_clean[,-c(1,4)]
+
+data_final <- data_final[complete.cases(data_final),]
+
+nullmodel <- lm(distance ~ 1, data_final)
+fullmodel <- lm(distance ~ ., data_final)
+
+stepAIC(nullmodel, scope=list(lower=nullmodel, upper=fullmodel), direction= "forward")
+```
+
+**Observations:**
+
+* The stepAIC starts from the null model selects 4 variables that lead to the lowest AIC value
+* The four variables selected are:
+    1. Speed Air
+    2. Aircraft Type (1 for Airbus, 0 for Boeing)
+    3. Height
+    4. Number of passengers
+
+**Conclusion:**
+
+* We observe a new varaible, number of passengers different from our analysis in the previous step
+* However from Step 3 to Step 4 in forward selection, we do not observe a significant decrease in the AIC
+* To test this new variable, we run this new model and check the PValue of the coefficients
+
+We run the model again to check the p-value, the results of which are below::
+
+** R Code:**
+```{r message=FALSE, error=FALSE, warning=FALSE}
+summary(lm(formula = distance ~ speed_air + aircraft_tp + height + no_pasg, 
+           data = data_final))$coefficients
+```
+
+**Observation:**
+
+* The PValue of no_pasg is 0.137; This indicates there is not suffiecient eveidence to reject the hypothesis that there is no relation between landing distance and nuber of passengers
+* Also, the AIC decrease by adding this new variable is not significant from the three variable model
+
+**Conclusion:**
+
+* We can retain the three variable model to determine landing distance
+* This model has an adjusted R-Squared of 97.3% and an AIC value of 2571
+
+## Summary
+
+* The sample flight records from both the tables were combined and duplicates were removed
+* Data cleaning was performed to remove the abnormal/outlier observations
+* Univaraite and Bivaraiate analysis was done to study the relationship between varaibles
+* Correlation, Single variable regression was performed to rank the most important factors to determine landing distance
+* Variable selection was done using R-Squared, Adjusted-R Sqaured and AIC values; The final variables selected to model the landing distance are:
+    + Air Speed
+    + Make/Type of Aircraft
+    + Height
+* These results were confirmed with the forward AIC selection method, with the exception of number of passengers being added
+    + The new variable, however, had a high PValue and hence was insignificant
