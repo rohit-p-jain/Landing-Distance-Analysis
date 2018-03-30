@@ -1,5 +1,5 @@
 # Landing-Distance-Analysis
-This is a project to analyze the factors impact the landing distance of an aircraft. Linear regression was used to create the final model.
+This project analyzes the factors impact the landing distance of an aircraft. Linear regression was used to create the final model.
 
 The steps followed in this projected to analyze landing distance are:
 - Data Cleaning
@@ -21,3 +21,6 @@ The steps followed in this projected to analyze landing distance are:
   3. Reduce the model using step function
   4. Plot residual diagnostics
   5. Present key model results
+
+## Key concepts: 
+Data cleaning, EDA, Correlation, Regression, Code Automation
